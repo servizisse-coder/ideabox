@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useAppStore } from '@/store/app-store'
@@ -10,7 +10,6 @@ const PUBLIC_ROUTES = ['/login', '/register', '/forgot-password']
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [isLoading, setIsLoading] = useState(true)
   const initRef = useRef(false)
   const { 
     setUser, 
@@ -21,10 +20,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCurrentCycle 
   } = useAppStore()
 
-  const isPublicRoute = PUBLIC_ROUTES.includes(pathname)
+  useEffect(() => {
+    if (initRef.current) return
+    initRef.current = true
 
-  const loadAppData = useCallback(async (supabase: ReturnType<typeof createClient>, userId: string) => {
-    try {
+    const supabase = createClient()
+
+    const loadData = async (userId: string) => {
       const [categoriesRes, ideasRes, votesRes, notificationsRes, cyclesRes] = await Promise.all([
         supabase.from('categories').select('*').order('name'),
         supabase.from('ideas').select('*, author:profiles(*), category:categories(*)').neq('status', 'draft').order('created_at', { ascending: false }),
@@ -37,72 +39,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (ideasRes.data) setIdeas(ideasRes.data as any)
       if (votesRes.data) setUserVotes(votesRes.data)
       if (notificationsRes.data) setNotifications(notificationsRes.data as any)
-      if (cyclesRes.data && cyclesRes.data.length > 0) setCurrentCycle(cyclesRes.data[0])
-    } catch (error) {
-      console.error('Error loading app data:', error)
+      if (cyclesRes.data?.[0]) setCurrentCycle(cyclesRes.data[0])
     }
-  }, [setCategories, setIdeas, setUserVotes, setNotifications, setCurrentCycle])
-
-  useEffect(() => {
-    // Prevent double initialization
-    if (initRef.current) return
-    initRef.current = true
-
-    const supabase = createClient()
-    let mounted = true
 
     const init = async () => {
-      // For public routes, just stop loading immediately
-      if (isPublicRoute) {
-        setIsLoading(false)
-        return
-      }
+      if (PUBLIC_ROUTES.includes(pathname)) return
 
-      try {
-        const { data: { session } } = await supabase.auth.getSession()
-        
-        if (!session?.user) {
-          if (mounted) {
-            setIsLoading(false)
-            router.replace('/login')
-          }
-          return
-        }
-
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (session?.user) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', session.user.id)
           .single()
 
-        if (!profile) {
-          if (mounted) {
-            setIsLoading(false)
-            router.replace('/login')
-          }
-          return
-        }
-
-        if (mounted) {
+        if (profile) {
           setUser(profile)
-          await loadAppData(supabase, session.user.id)
-          setIsLoading(false)
-        }
-      } catch (error) {
-        console.error('Auth error:', error)
-        if (mounted) {
-          setIsLoading(false)
-          router.replace('/login')
+          await loadData(session.user.id)
         }
       }
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (!mounted) return
-
-        console.log('Auth event:', event)
-
         if (event === 'SIGNED_IN' && session?.user) {
           const { data: profile } = await supabase
             .from('profiles')
@@ -112,42 +72,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           if (profile) {
             setUser(profile)
-            await loadAppData(supabase, session.user.id)
+            await loadData(session.user.id)
+            router.push('/')
           }
-          setIsLoading(false)
-          router.replace('/')
         } else if (event === 'SIGNED_OUT') {
           setUser(null)
-          setIsLoading(false)
-          router.replace('/login')
+          router.push('/login')
         }
       }
     )
 
     init()
 
-    return () => {
-      mounted = false
-      subscription.unsubscribe()
-    }
-  }, []) // Empty deps - run only once
+    return () => subscription.unsubscribe()
+  }, [])
 
-  // Public routes render immediately
-  if (isPublicRoute) {
-    return <>{children}</>
-  }
-
-  // Protected routes show loading
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-          <p className="text-gray-500">Caricamento...</p>
-        </div>
-      </div>
-    )
-  }
-
+  // Always render children - middleware handles auth
   return <>{children}</>
 }
