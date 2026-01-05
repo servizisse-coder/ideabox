@@ -1,6 +1,5 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { 
   Plus, 
@@ -14,9 +13,8 @@ import {
 import { Header } from '@/components/layout/header'
 import { TopIdeasTable } from '@/components/ideas/top-ideas-table'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { useAppStore } from '@/store/app-store'
-import { formatDate } from '@/lib/utils'
 
 export default function HomePage() {
   const { user, ideas, currentCycle } = useAppStore()
@@ -49,6 +47,8 @@ export default function HomePage() {
     ? Math.ceil((new Date(currentCycle.review_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
     : null
 
+  const userName = user?.full_name?.split(' ')[0] || 'Utente'
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header />
@@ -57,7 +57,7 @@ export default function HomePage() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-gray-900">
-            Ciao, {user?.full_name?.split(' ')[0]} 👋
+            Ciao, {userName} 👋
           </h1>
           <p className="text-gray-600 mt-1">
             Hai un&apos;idea? Questo è il posto giusto per condividerla!
