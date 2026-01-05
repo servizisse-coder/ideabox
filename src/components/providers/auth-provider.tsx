@@ -25,6 +25,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const supabase = createClient()
 
+    const loadCategories = async () => {
+      try {
+        const { data } = await supabase.from('categories').select('*').order('name')
+        if (data) setCategories(data as Category[])
+      } catch (e) {
+        console.error('Error loading categories:', e)
+      }
+    }
+
+    const loadIdeas = async () => {
+      try {
+        const { data } = await supabase
+          .from('ideas')
+          .select(`
+            *,
+            author:profiles(*),
+            category:categories(*)
+          `)
+          .neq('status', 'draft')
+          .order('created_at', { ascending: false })
+        
+        if (data) setIdeas(data as unknown as Idea[])
+      } catch (e) {
+        console.error('Error loading ideas:', e)
+      }
+    }
+
+    const loadUserVotes = async (userId: string) => {
+      try {
+        const { data } = await supabase
+          .from('votes')
+          .select('*')
+          .eq('user_id', userId)
+        
+        if (data) setUserVotes(data as Vote[])
+      } catch (e) {
+        console.error('Error loading votes:', e)
+      }
+    }
+
+    const loadNotifications = async (userId: string) => {
+      try {
+        const { data } = await supabase
+          .from('notifications')
+          .select('id, user_id, type, title, message, idea_id, is_read, scheduled_for, created_at')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (data) setNotifications(data as Notification[])
+      } catch (e) {
+        console.error('Error loading notifications:', e)
+      }
+    }
+
+    const loadCurrentCycle = async () => {
+      try {
+        const { data } = await supabase
+          .from('review_cycles')
+          .select('*')
+          .order('cycle_number', { ascending: false })
+          .limit(1)
+        
+        if (data && data.length > 0) {
+          setCurrentCycle(data[0] as ReviewCycle)
+        }
+      } catch (e) {
+        console.error('Error loading cycle:', e)
+      }
+    }
+
     const initializeAuth = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession()
@@ -40,13 +111,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (profile) {
             setUser(profile as Profile)
             
-            // Load initial data
+            // Load initial data in parallel
             await Promise.all([
-              loadCategories(supabase),
-              loadIdeas(supabase),
-              loadUserVotes(supabase, session.user.id),
-              loadNotifications(supabase, session.user.id),
-              loadCurrentCycle(supabase),
+              loadCategories(),
+              loadIdeas(),
+              loadUserVotes(session.user.id),
+              loadNotifications(session.user.id),
+              loadCurrentCycle(),
             ])
           }
         } else if (!PUBLIC_ROUTES.includes(pathname)) {
@@ -72,11 +143,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (profile) {
             setUser(profile as Profile)
             await Promise.all([
-              loadCategories(supabase),
-              loadIdeas(supabase),
-              loadUserVotes(supabase, session.user.id),
-              loadNotifications(supabase, session.user.id),
-              loadCurrentCycle(supabase),
+              loadCategories(),
+              loadIdeas(),
+              loadUserVotes(session.user.id),
+              loadNotifications(session.user.id),
+              loadCurrentCycle(),
             ])
           }
         } else if (event === 'SIGNED_OUT') {
@@ -94,56 +165,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
     }
   }, [pathname, router, setUser, setCategories, setIdeas, setUserVotes, setNotifications, setCurrentCycle])
-
-  const loadCategories = async (supabase: ReturnType<typeof createClient>) => {
-    const { data } = await supabase.from('categories').select('*').order('name')
-    if (data) setCategories(data as Category[])
-  }
-
-  const loadIdeas = async (supabase: ReturnType<typeof createClient>) => {
-    const { data } = await supabase
-      .from('ideas')
-      .select(`
-        *,
-        author:profiles(*),
-        category:categories(*)
-      `)
-      .neq('status', 'draft')
-      .order('created_at', { ascending: false })
-    
-    if (data) setIdeas(data as unknown as Idea[])
-  }
-
-  const loadUserVotes = async (supabase: ReturnType<typeof createClient>, userId: string) => {
-    const { data } = await supabase
-      .from('votes')
-      .select('*')
-      .eq('user_id', userId)
-    
-    if (data) setUserVotes(data as Vote[])
-  }
-
-  const loadNotifications = async (supabase: ReturnType<typeof createClient>, userId: string) => {
-    const { data } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(50)
-    
-    if (data) setNotifications(data as Notification[])
-  }
-
-  const loadCurrentCycle = async (supabase: ReturnType<typeof createClient>) => {
-    const { data } = await supabase
-      .from('review_cycles')
-      .select('*')
-      .order('cycle_number', { ascending: false })
-      .limit(1)
-      .single()
-    
-    if (data) setCurrentCycle(data as ReviewCycle)
-  }
 
   // Show loading state
   if (isLoading) {
