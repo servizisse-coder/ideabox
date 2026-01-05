@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Lightbulb, Send, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,8 +20,9 @@ import { toast } from '@/hooks/use-toast'
 
 export function NewIdeaForm() {
   const router = useRouter()
-  const { user, categories, addIdea } = useAppStore()
+  const { user, categories, setCategories, addIdea } = useAppStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -29,9 +30,31 @@ export function NewIdeaForm() {
     is_anonymous: false,
   })
 
+  // Load categories if not already loaded
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (categories.length > 0) return
+      
+      setIsLoadingCategories(true)
+      const supabase = createClient()
+      const { data } = await supabase.from('categories').select('*').order('name')
+      if (data) setCategories(data)
+      setIsLoadingCategories(false)
+    }
+    
+    loadCategories()
+  }, [categories.length, setCategories])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) return
+    if (!user) {
+      toast({
+        title: "Errore",
+        description: "Devi essere autenticato per inviare un'idea",
+        variant: "destructive",
+      })
+      return
+    }
 
     if (!formData.title.trim() || !formData.description.trim()) {
       toast({
@@ -145,9 +168,10 @@ export function NewIdeaForm() {
             <Select 
               value={formData.category_id} 
               onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+              disabled={isLoadingCategories}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Seleziona una categoria (opzionale)" />
+                <SelectValue placeholder={isLoadingCategories ? "Caricamento..." : "Seleziona una categoria (opzionale)"} />
               </SelectTrigger>
               <SelectContent>
                 {categories.map((category) => (
@@ -211,7 +235,7 @@ export function NewIdeaForm() {
             </Button>
             <Button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !user}
               className="flex-1 gap-2"
             >
               {isSubmitting ? (
