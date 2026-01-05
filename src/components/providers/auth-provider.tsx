@@ -47,14 +47,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
       if (mounted && votes) setUserVotes(votes)
 
-      // Load notifications - only basic fields
+      // Load notifications
       const { data: notifications } = await supabase
         .from('notifications')
-        .select('id, user_id, type, title, message, idea_id, is_read, created_at')
+        .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
         .limit(50)
-      if (mounted && notifications) setNotifications(notifications)
+      if (mounted && notifications) setNotifications(notifications as any)
 
       // Load current cycle
       const { data: cycles } = await supabase
