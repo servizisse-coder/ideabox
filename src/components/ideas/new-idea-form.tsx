@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Lightbulb, Send, Eye, EyeOff, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -16,6 +16,7 @@ export function NewIdeaForm() {
   const { user, categories, setCategories, addIdea } = useAppStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingCategories, setIsLoadingCategories] = useState(false)
+  const isFetchingRef = useRef(false)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -25,16 +26,35 @@ export function NewIdeaForm() {
 
   // Load categories if not already loaded
   useEffect(() => {
-    const loadCategories = async () => {
-      if (categories.length > 0) return
-      
-      setIsLoadingCategories(true)
-      const supabase = createClient()
-      const { data } = await supabase.from('categories').select('*').order('name')
-      if (data) setCategories(data)
+    // If categories are already loaded (from AuthProvider or previous fetch), nothing to do
+    if (categories.length > 0) {
       setIsLoadingCategories(false)
+      return
     }
-    
+
+    // Prevent concurrent fetches (React 18+ Strict Mode can trigger double effects)
+    if (isFetchingRef.current) return
+
+    const loadCategories = async () => {
+      isFetchingRef.current = true
+      setIsLoadingCategories(true)
+      try {
+        const supabase = createClient()
+        const { data, error } = await supabase.from('categories').select('*').order('name')
+        if (error) {
+          console.error('Error loading categories:', error)
+        }
+        if (data && data.length > 0) {
+          setCategories(data)
+        }
+      } catch (error) {
+        console.error('Error loading categories:', error)
+      } finally {
+        setIsLoadingCategories(false)
+        isFetchingRef.current = false
+      }
+    }
+
     loadCategories()
   }, [categories.length, setCategories])
 
