@@ -2,18 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Lightbulb, Send, Eye, EyeOff } from 'lucide-react'
+import { Lightbulb, Send, Eye, EyeOff, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select'
 import { useAppStore } from '@/store/app-store'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from '@/hooks/use-toast'
@@ -160,33 +153,30 @@ export function NewIdeaForm() {
             </p>
           </div>
 
-          {/* Category */}
+          {/* Category - Native Select */}
           <div className="space-y-2">
             <label htmlFor="category" className="text-sm font-medium text-gray-700">
               Categoria
             </label>
-            <Select 
-              value={formData.category_id} 
-              onValueChange={(value) => setFormData({ ...formData, category_id: value })}
-              disabled={isLoadingCategories}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder={isLoadingCategories ? "Caricamento..." : "Seleziona una categoria (opzionale)"} />
-              </SelectTrigger>
-              <SelectContent>
+            <div className="relative">
+              <select
+                id="category"
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                disabled={isLoadingCategories}
+                className="flex h-10 w-full appearance-none items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <option value="">
+                  {isLoadingCategories ? "Caricamento..." : "Seleziona una categoria (opzionale)"}
+                </option>
                 {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    <div className="flex items-center gap-2">
-                      <span 
-                        className="w-3 h-3 rounded-full" 
-                        style={{ backgroundColor: category.color }}
-                      />
-                      {category.name}
-                    </div>
-                  </SelectItem>
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50 pointer-events-none" />
+            </div>
           </div>
 
           {/* Anonymous toggle */}
