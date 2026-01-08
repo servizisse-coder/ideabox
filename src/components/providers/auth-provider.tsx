@@ -52,16 +52,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const init = async () => {
       try {
+        console.log('AuthProvider init starting...')
         const { data: { session } } = await supabase.auth.getSession()
-        
+        console.log('Session:', session?.user?.id ? 'exists' : 'none')
+
         if (session?.user) {
-          const { data: profile } = await supabase
+          console.log('Init: Fetching profile for user:', session.user.id)
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .single()
 
+          console.log('Init: Profile fetch result:', { profile, profileError })
+
+          if (profileError && profileError.code === 'PGRST116') {
+            // Profilo non esiste, crealo
+            console.log('Init: Profile not found, creating...')
+            const { data: newProfile, error: createError } = await supabase
+              .from('profiles')
+              .insert({
+                id: session.user.id,
+                email: session.user.email!,
+                full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Utente'
+              })
+              .select()
+              .single()
+
+            if (newProfile) {
+              console.log('Init: Profile created, setting user:', newProfile)
+              setUser(newProfile)
+              await loadAllData(session.user.id)
+              return
+            } else {
+              console.error('Init: Error creating profile:', createError)
+            }
+          }
+
           if (profile) {
+            console.log('Init: Setting user in store:', profile)
             setUser(profile)
             await loadAllData(session.user.id)
           }
@@ -74,16 +103,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth event:', event)
-        
+        console.log('Auth event:', event, 'User ID:', session?.user?.id)
+
         if (event === 'SIGNED_IN' && session?.user) {
-          const { data: profile } = await supabase
+          console.log('Fetching profile for user:', session.user.id)
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('*')
             .eq('id', session.user.id)
             .single()
 
+          console.log('Profile fetch result:', { profile, profileError })
+
+          if (profileError) {
+            console.error('Error fetching profile:', profileError)
+            // Se il profilo non esiste, crealo
+            if (profileError.code === 'PGRST116') {
+              console.log('Profile not found, creating one...')
+              const { data: newProfile, error: createError } = await supabase
+                .from('profiles')
+                .insert({
+                  id: session.user.id,
+                  email: session.user.email!,
+                  full_name: session.user.user_metadata?.full_name || session.user.email?.split('@')[0] || 'Utente'
+                })
+                .select()
+                .single()
+
+              if (newProfile) {
+                console.log('Profile created:', newProfile)
+                setUser(newProfile)
+                await loadAllData(session.user.id)
+                router.push('/')
+                return
+              } else {
+                console.error('Error creating profile:', createError)
+              }
+            }
+          }
+
           if (profile) {
+            console.log('Setting user in store:', profile)
             setUser(profile)
             await loadAllData(session.user.id)
             router.push('/')
