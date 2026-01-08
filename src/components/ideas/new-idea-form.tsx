@@ -15,7 +15,7 @@ export function NewIdeaForm() {
   const router = useRouter()
   const { user, categories, setCategories, addIdea } = useAppStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoadingCategories, setIsLoadingCategories] = useState(true) // Start as true
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     title: '',
@@ -24,9 +24,8 @@ export function NewIdeaForm() {
     is_anonymous: false,
   })
 
-  // Load categories function - can be called manually for retry
+  // Load categories function
   const loadCategories = useCallback(async (force = false) => {
-    // If we already have categories and not forcing, use them
     if (categories.length > 0 && !force) {
       console.log('[NewIdeaForm] Categories already in store:', categories.length)
       setIsLoadingCategories(false)
@@ -38,9 +37,47 @@ export function NewIdeaForm() {
     setIsLoadingCategories(true)
     setLoadError(null)
 
+    // First, test raw fetch to see if connection works
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    
+    console.log('[NewIdeaForm] Supabase URL:', supabaseUrl)
+    console.log('[NewIdeaForm] Supabase Key exists:', !!supabaseKey)
+    console.log('[NewIdeaForm] Supabase Key prefix:', supabaseKey?.substring(0, 20) + '...')
+
     try {
+      // Test 1: Direct fetch (bypass Supabase client)
+      console.log('[NewIdeaForm] Testing direct fetch...')
+      const directUrl = `${supabaseUrl}/rest/v1/categories?select=*&order=name`
+      console.log('[NewIdeaForm] Direct URL:', directUrl)
+      
+      const directResponse = await fetch(directUrl, {
+        headers: {
+          'apikey': supabaseKey || '',
+          'Authorization': `Bearer ${supabaseKey}`,
+        }
+      })
+      
+      console.log('[NewIdeaForm] Direct fetch status:', directResponse.status)
+      
+      if (directResponse.ok) {
+        const directData = await directResponse.json()
+        console.log('[NewIdeaForm] Direct fetch success! Categories:', directData.length)
+        
+        if (directData && directData.length > 0) {
+          setCategories(directData)
+          setLoadError(null)
+          setIsLoadingCategories(false)
+          return
+        }
+      } else {
+        const errorText = await directResponse.text()
+        console.error('[NewIdeaForm] Direct fetch error:', errorText)
+      }
+
+      // Test 2: Supabase client (fallback)
+      console.log('[NewIdeaForm] Trying Supabase client...')
       const supabase = createClient()
-      console.log('[NewIdeaForm] Supabase client created, fetching categories...')
       
       const { data, error } = await supabase
         .from('categories')
@@ -56,23 +93,22 @@ export function NewIdeaForm() {
       }
 
       if (!data || data.length === 0) {
-        console.warn('[NewIdeaForm] No categories returned from database')
-        setLoadError('Nessuna categoria trovata nel database')
+        console.warn('[NewIdeaForm] No categories returned')
+        setLoadError('Nessuna categoria trovata')
         return
       }
 
-      console.log('[NewIdeaForm] Categories loaded successfully:', data.length)
+      console.log('[NewIdeaForm] Categories loaded:', data.length)
       setCategories(data)
       setLoadError(null)
     } catch (error) {
-      console.error('[NewIdeaForm] Exception loading categories:', error)
+      console.error('[NewIdeaForm] Exception:', error)
       setLoadError(error instanceof Error ? error.message : 'Errore sconosciuto')
     } finally {
       setIsLoadingCategories(false)
     }
   }, [categories.length, setCategories])
 
-  // Load categories on mount
   useEffect(() => {
     loadCategories()
   }, [loadCategories])
@@ -182,7 +218,7 @@ export function NewIdeaForm() {
             </label>
             <Textarea
               id="description"
-              placeholder="Descrivi la tua idea in dettaglio. Cosa proponi? Perché è importante? Come potrebbe essere implementata?"
+              placeholder="Descrivi la tua idea in dettaglio..."
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               rows={6}
@@ -192,14 +228,13 @@ export function NewIdeaForm() {
             </p>
           </div>
 
-          {/* Category - Native Select with Error Handling */}
+          {/* Category */}
           <div className="space-y-2">
             <label htmlFor="category" className="text-sm font-medium text-gray-700">
               Categoria
             </label>
             
             {loadError ? (
-              // Error state with retry button
               <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
                 <span className="text-sm text-red-600 flex-1">{loadError}</span>
                 <Button
@@ -250,7 +285,7 @@ export function NewIdeaForm() {
                 </p>
                 <p className="text-xs text-gray-500">
                   {formData.is_anonymous 
-                    ? "Il tuo nome non sarà visibile agli altri utenti (ma gli admin lo vedranno)" 
+                    ? "Il tuo nome non sarà visibile agli altri utenti" 
                     : "Il tuo nome sarà visibile a tutti"}
                 </p>
               </div>
