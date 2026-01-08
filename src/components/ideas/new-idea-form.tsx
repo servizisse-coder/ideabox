@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Lightbulb, Send, Eye, EyeOff, ChevronDown } from 'lucide-react'
+import { Lightbulb, Send, Eye, EyeOff, ChevronDown, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -15,8 +15,8 @@ export function NewIdeaForm() {
   const router = useRouter()
   const { user, categories, setCategories, addIdea } = useAppStore()
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isLoadingCategories, setIsLoadingCategories] = useState(false)
-  const isFetchingRef = useRef(false)
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true) // Start as true
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -24,39 +24,58 @@ export function NewIdeaForm() {
     is_anonymous: false,
   })
 
-  // Load categories if not already loaded
-  useEffect(() => {
-    // If categories are already loaded (from AuthProvider or previous fetch), nothing to do
-    if (categories.length > 0) {
+  // Load categories function - can be called manually for retry
+  const loadCategories = useCallback(async (force = false) => {
+    // If we already have categories and not forcing, use them
+    if (categories.length > 0 && !force) {
+      console.log('[NewIdeaForm] Categories already in store:', categories.length)
       setIsLoadingCategories(false)
+      setLoadError(null)
       return
     }
 
-    // Prevent concurrent fetches (React 18+ Strict Mode can trigger double effects)
-    if (isFetchingRef.current) return
+    console.log('[NewIdeaForm] Loading categories...')
+    setIsLoadingCategories(true)
+    setLoadError(null)
 
-    const loadCategories = async () => {
-      isFetchingRef.current = true
-      setIsLoadingCategories(true)
-      try {
-        const supabase = createClient()
-        const { data, error } = await supabase.from('categories').select('*').order('name')
-        if (error) {
-          console.error('Error loading categories:', error)
-        }
-        if (data && data.length > 0) {
-          setCategories(data)
-        }
-      } catch (error) {
-        console.error('Error loading categories:', error)
-      } finally {
-        setIsLoadingCategories(false)
-        isFetchingRef.current = false
+    try {
+      const supabase = createClient()
+      console.log('[NewIdeaForm] Supabase client created, fetching categories...')
+      
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name')
+
+      console.log('[NewIdeaForm] Supabase response:', { data, error })
+
+      if (error) {
+        console.error('[NewIdeaForm] Supabase error:', error)
+        setLoadError(`Errore database: ${error.message}`)
+        return
       }
-    }
 
-    loadCategories()
+      if (!data || data.length === 0) {
+        console.warn('[NewIdeaForm] No categories returned from database')
+        setLoadError('Nessuna categoria trovata nel database')
+        return
+      }
+
+      console.log('[NewIdeaForm] Categories loaded successfully:', data.length)
+      setCategories(data)
+      setLoadError(null)
+    } catch (error) {
+      console.error('[NewIdeaForm] Exception loading categories:', error)
+      setLoadError(error instanceof Error ? error.message : 'Errore sconosciuto')
+    } finally {
+      setIsLoadingCategories(false)
+    }
   }, [categories.length, setCategories])
+
+  // Load categories on mount
+  useEffect(() => {
+    loadCategories()
+  }, [loadCategories])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -173,30 +192,48 @@ export function NewIdeaForm() {
             </p>
           </div>
 
-          {/* Category - Native Select */}
+          {/* Category - Native Select with Error Handling */}
           <div className="space-y-2">
             <label htmlFor="category" className="text-sm font-medium text-gray-700">
               Categoria
             </label>
-            <div className="relative">
-              <select
-                id="category"
-                value={formData.category_id}
-                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
-                disabled={isLoadingCategories}
-                className="flex h-10 w-full appearance-none items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <option value="">
-                  {isLoadingCategories ? "Caricamento..." : "Seleziona una categoria (opzionale)"}
-                </option>
-                {categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
+            
+            {loadError ? (
+              // Error state with retry button
+              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <span className="text-sm text-red-600 flex-1">{loadError}</span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadCategories(true)}
+                  className="gap-1"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Riprova
+                </Button>
+              </div>
+            ) : (
+              <div className="relative">
+                <select
+                  id="category"
+                  value={formData.category_id}
+                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                  disabled={isLoadingCategories}
+                  className="flex h-10 w-full appearance-none items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="">
+                    {isLoadingCategories ? "Caricamento categorie..." : "Seleziona una categoria (opzionale)"}
                   </option>
-                ))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50 pointer-events-none" />
-            </div>
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-50 pointer-events-none" />
+              </div>
+            )}
           </div>
 
           {/* Anonymous toggle */}
