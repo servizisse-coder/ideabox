@@ -26,7 +26,6 @@ import { useRouter } from 'next/navigation'
 
 const navigation = [
   { name: 'Home', href: '/', icon: LayoutDashboard },
-  { name: 'Tutte le Idee', href: '/ideas', icon: Lightbulb },
   { name: 'Approvate', href: '/approved', icon: CheckCircle },
   { name: 'Non Approvate', href: '/rejected', icon: XCircle },
 ]
